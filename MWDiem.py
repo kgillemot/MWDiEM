@@ -1,4 +1,4 @@
-#!/usr/bin/python3.5
+#!/opt/conda/bin/python3.6
 
 import sys 
 sys.path.append("./LIBRARIES/")
@@ -16,6 +16,8 @@ import LIBRARY_Plotting as Plot
 import LIBRARY_Vtk_creator as Vtk
 import LIBRARY_Force as Forcy
 import LIBRARY_Write_particle_data as Writeout
+from numba import guvectorize
+
 	
 #os.system("rm ./No_collision/*")
 #os.system("rm ./Collision/*")
@@ -152,23 +154,56 @@ for i in range(0,num_timesteps):
 
 	##### 2. Fine contact detection via GJK an EPA and calculate force ######################################
 
-
+	#@vectorize(['float32,float32,float32,float32,float32,float32,float32,float32,float32,float32,float32,float32,float32(float32, float32,float32,float32)'], target='cuda')
+	particle_A_center_of_mass=[]
+	particle_B_center_of_mass=[]
+	particle_A_vertices=[]
+	particle_B_vertices=[]
+	particle_A_velocity=[]
+	particle_B_velocity=[]
+	aa=[]
+	bb=[]
+	force=[]
+	
 	for j in range(0,len(pairs_to_check)):
-		(S1,aa1,bb1,S2,aa2,bb2,S3,aa3,bb3,S4,aa4,bb4,coll)=Fine_contact.GJKuj_algorithm(particle[pairs_to_check[j][0]],particle[pairs_to_check[j][1]],pairs_to_check[j][0],pairs_to_check[j][1])	
-		if coll==1:
-			(penetration_depth,penetration_normal,contact_point_A,contact_point_B)=Fine_contact.EPA(S1,aa1,bb1,S2,aa2,bb2,S3,aa3,bb3,S4,aa4,bb4,particle[pairs_to_check[j][0]],particle[pairs_to_check[j][1]])
+		#(Fn_A,Fn_As,Fn_Ad,Torque_A,Torque_B)=Fine_contact.Contact_detection_GPU(particle[pairs_to_check[j][0]],particle[pairs_to_check[j][1]],pairs_to_check[j][0],pairs_to_check[j][1])	
+         #Contact_detection_GPU(particle_A_center_of_mass,particle_B_center_of_mass,particle_A_vertices,particle_B_vertices,aa,bb):
+		particle_A_center_of_mass.append(particle[pairs_to_check[j][0]].center_of_mass)
+		particle_B_center_of_mass.append(particle[pairs_to_check[j][1]].center_of_mass)
+		vertA=[]
+		vertB=[]
+		for k in range(0,len(particle[pairs_to_check[j][0]].vertices)):
+			vertA.append(particle[pairs_to_check[j][0]].vertices[k].vertex_coo)
+		for k in range(0,len(particle[pairs_to_check[j][1]].vertices)):
+			vertB.append(particle[pairs_to_check[j][1]].vertices[k].vertex_coo)
+		particle_A_vertices.append(vertA)
+		particle_B_vertices.append(vertB)
+		particle_A_velocity.append(particle[pairs_to_check[j][0]].velocity)
+		particle_B_velocity.append(particle[pairs_to_check[j][1]].velocity)
+		aa.append(pairs_to_check[j][0])
+		bb.append(pairs_to_check[j][1])
+		force.append([[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]])
+		
+	Fine_contact.Contact_detection_GPU(particle_A_center_of_mass,particle_B_center_of_mass,particle_A_vertices,particle_B_vertices,particle_A_velocity,particle_B_velocity,aa,bb,Ks,Kd,mu,force)
+
+	#print(force)
+	
+	
+		#if coll==1:
+			#(penetration_depth,penetration_normal,contact_point_A,contact_point_B)=Fine_contact.EPA(S1,aa1,bb1,S2,aa2,bb2,S3,aa3,bb3,S4,aa4,bb4,particle[pairs_to_check[j][0]],particle[pairs_to_check[j][1]])
 			
-			(Fn_A,Fn_As,Fn_Ad,TorqueA,TorqueB)=Forcy.Force(particle[pairs_to_check[j][0]],particle[pairs_to_check[j][1]],penetration_depth,penetration_normal,contact_point_A,contact_point_B,Ks,Kd,mu)
+			#(Fn_A,Fn_As,Fn_Ad,TorqueA,TorqueB)=Forcy.Force(particle[pairs_to_check[j][0]],particle[pairs_to_check[j][1]],penetration_depth,penetration_normal,contact_point_A,contact_point_B,Ks,Kd,mu)
+	
+	for j in range(0,len(pairs_to_check)):		
+			particle[pairs_to_check[j][0]].force_normal=particle[pairs_to_check[j][0]].force_normal+force[j][0]
+			particle[pairs_to_check[j][1]].force_normal=particle[pairs_to_check[j][1]].force_normal-force[j][0]			
+			particle[pairs_to_check[j][0]].force_n_spring=particle[pairs_to_check[j][0]].force_n_spring+force[j][1]
+			particle[pairs_to_check[j][1]].force_n_spring=particle[pairs_to_check[j][1]].force_n_spring-force[j][1]
+			particle[pairs_to_check[j][0]].force_n_damping=particle[pairs_to_check[j][0]].force_n_damping+force[j][2]
+			particle[pairs_to_check[j][1]].force_n_damping=particle[pairs_to_check[j][1]].force_n_damping-force[j][2]
 			
-			particle[pairs_to_check[j][0]].force_normal=particle[pairs_to_check[j][0]].force_normal+Fn_A
-			particle[pairs_to_check[j][1]].force_normal=particle[pairs_to_check[j][1]].force_normal-Fn_A			
-			particle[pairs_to_check[j][0]].force_n_spring=particle[pairs_to_check[j][0]].force_n_spring+Fn_As
-			particle[pairs_to_check[j][1]].force_n_spring=particle[pairs_to_check[j][1]].force_n_spring-Fn_As
-			particle[pairs_to_check[j][0]].force_n_damping=particle[pairs_to_check[j][0]].force_n_damping+Fn_Ad
-			particle[pairs_to_check[j][1]].force_n_damping=particle[pairs_to_check[j][1]].force_n_damping-Fn_Ad
-			
-			particle[pairs_to_check[j][0]].torque=particle[pairs_to_check[j][0]].torque+TorqueA
-			particle[pairs_to_check[j][1]].torque=particle[pairs_to_check[j][1]].torque+TorqueB
+			particle[pairs_to_check[j][0]].torque=particle[pairs_to_check[j][0]].torque+force[j][3]
+			particle[pairs_to_check[j][1]].torque=particle[pairs_to_check[j][1]].torque+force[j][4]
 
 	##### KERDES, H a PENETRATION NORMAL EGYSEGNYI HOSSZU E !!!!!!!!!!!!!!!!!!!!##############	
 			
