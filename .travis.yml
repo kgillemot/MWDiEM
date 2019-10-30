@@ -1,0 +1,19 @@
+language: python
+python:
+  - "3.6"
+  - "3.7"
+  - "3.8"
+
+# command to install dependencies
+install:
+  - pip install -r min_requirements.txt
+  - pip install coveralls codecov coverage
+
+# command to run tests
+script:
+  - python -m coverage run --source . MWDiem.py  -m 4 -m 5 -t 100 --seed 5 -o test
+  - python -m coverage run --source . MWDiem.py  -m 4 -m 5 -t 100 --seed 5 -o test -f
+  - md5sum test/Out_0.vtk |grep 73fcadbf1bf1fdb6f1668394f33d13a3
+
+after_success:
+  - coveralls
