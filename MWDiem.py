@@ -17,7 +17,7 @@ import LIBRARY_Write_particle_data as Writeout
 import LIBRARY_Force as Forcy
 import LIBRARY_Vtk_creator as Vtk
 import LIBRARY_Plotting as Plot
-import LIBRARY_Fine_contact_detection as Fine_contact
+import gpu_fine_contact_detection as Fine_contact
 import LIBRARY_Coarse_contact_detection as Coarse_contact
 from Particle_class import *
 
@@ -82,9 +82,23 @@ mass = args.mass
 
 
 # external acceleration (m/s^2)
-accel_external = np.array([[0, 0, -10], [0, 0, 0]])
-force_external = accel_external*mass[0]
-torque_external = np.array([[0, 0, 0], [0, 0, 0]])
+acc_ext_def=[0,0,-10]
+torq_ext_def=[0,0,0]
+mass_def=1
+accel_external=[]
+force_external=[]
+torque_external=[]
+mass=[]
+for i in range(0,num_particles):
+	accel_external.append(acc_ext_def)
+	force_external.append(acc_ext_def*mass_def)
+	torque_external.append(torq_ext_def)
+	mass.append(mass_def)
+accel_external=np.array(accel_external)
+force_external = np.array(force_external)
+torque_external = np.array(torque_external)
+mass=np.array(mass)
+
 
 # spring constanct
 Ks = 1*10**9
@@ -125,10 +139,10 @@ for i in range(0, num_particles):
 
 # Step 2. Generate particles
 
-particle[0].Cube_maker_3D(side_length)
-particle[1].Plane_maker_3D(normalvector, size_plane)
-# for i in range(0,num_particles):
-#   particle[i].Random_convex_polygon_maker_3D(num_vertices_min,num_vertices_max,min_radius,max_radius)
+#particle[0].Cube_maker_3D(side_length)
+#particle[1].Plane_maker_3D(normalvector, size_plane)
+for i in range(0,num_particles):
+   particle[i].Random_convex_polygon_maker_3D(num_vertices_min,num_vertices_max,min_radius,max_radius)
 
 # Step 3. Put particles into hash
 numcells = int(size_box/max_particlesize)
@@ -139,18 +153,18 @@ for i in range(0, num_particles):
 # Step 4. Initial positions
 
 # Randomly translate particle
-# for i in range(0,num_particles):
-    # transl=[np.random.random()*(size_box-max_radius*2),np.random.random()*(size_box-max_radius*2),np.random.random()*(size_box-max_radius*2)]
-    # particle[i].Translate(transl)
+#for i in range(0,num_particles):
+#	transl=[np.random.random()*(size_box-max_radius*2),np.random.random()*(size_box-max_radius*2),np.random.random()*(size_box-max_radius*2)]
+#	particle[i].Translate(transl)
 
-transl = [0, 0, 0.5]
-particle[0].Translate(transl)
-particle[0].Rotator_initial(45, np.array([0, 1, 0]))
+#transl = [0, 0, 0.5]
+#particle[0].Translate(transl)
+#particle[0].Rotator_initial(45, np.array([0, 1, 0]))
 
 # Step 5. Initial velocities
 
-particle[0].velocity = np.array([0, 1, -1])
-particle[0].angular_velocity = np.array([0, 0, 1])
+#particle[0].velocity = np.array([0, 1, -1])
+#particle[0].angular_velocity = np.array([0, 0, 1])
 
 
 ################ ITERATION ######################################################################
@@ -189,17 +203,18 @@ for i in range(0, num_timesteps):
 
     ##### 2. Fine contact detection via GJK an EPA and calculate force ######################################
 
-    # @vectorize(['float32,float32,float32,float32,float32,float32,float32,float32,float32,float32,float32,float32,float32(float32, float32,float32,float32)'], target='cuda')
     particle_A_center_of_mass = []
     particle_B_center_of_mass = []
     particle_A_vertices = []
     particle_B_vertices = []
     particle_A_velocity = []
     particle_B_velocity = []
-    aa = []
-    bb = []
+    particle_A_numvertices = []
+    particle_B_numvertices = []
+    particle_A_id = []
+    particle_B_id = []
     force = []
-
+    
 
     for j in range(0, len(pairs_to_check)):
         # (Fn_A,Fn_As,Fn_Ad,Torque_A,Torque_B)=Fine_contact.Contact_detection_GPU(particle[pairs_to_check[j][0]],particle[pairs_to_check[j][1]],pairs_to_check[j][0],pairs_to_check[j][1])
@@ -216,30 +231,34 @@ for i in range(0, num_timesteps):
         particle_B_vertices.append(vertB)
         particle_A_velocity.append(particle[pairs_to_check[j][0]].velocity)
         particle_B_velocity.append(particle[pairs_to_check[j][1]].velocity)
-        aa.append(pairs_to_check[j][0])
-        bb.append(pairs_to_check[j][1])
-        force.append([[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]])
-
-
+        particle_A_numvertices.append(particle[pairs_to_check[j][0]].num_vertices)
+        particle_B_numvertices.append(particle[pairs_to_check[j][1]].num_vertices)
+        particle_A_id.append(pairs_to_check[j][0])
+        particle_B_id.append(pairs_to_check[j][1])
+        
+        force.append(particle[pairs_to_check[j][0]].force_external)
+       
     particle_A_center_of_mass = np.asarray(particle_A_center_of_mass, dtype=dtype)
     particle_B_center_of_mass = np.asarray(particle_B_center_of_mass, dtype=dtype)
     particle_A_vertices = np.asarray(particle_A_vertices, dtype=dtype)
     particle_B_vertices = np.asarray(particle_B_vertices, dtype=dtype)
     particle_A_velocity = np.asarray(particle_A_velocity, dtype=dtype)
     particle_B_velocity = np.asarray(particle_B_velocity, dtype=dtype)
+    particle_A_numvertices= np.asarray(particle_A_numvertices, dtype=dtype)
+    particle_B_numvertices= np.asarray(particle_B_numvertices, dtype=dtype)
     force = np.asarray(force, dtype=dtype)
-    aa = np.asarray(aa, dtype=np.int32)
-    bb = np.asarray(bb, dtype=np.int32)
+    particle_A_id = np.asarray(particle_A_id, dtype=np.int32)
+    particle_B_id = np.asarray(particle_B_id, dtype=np.int32)
+    
+
 
     if CUDA:
         print('CUDA')
-        Fine_contact.Contact_detection_GPU(particle_A_center_of_mass, particle_B_center_of_mass, particle_A_vertices,
-                                       particle_B_vertices, particle_A_velocity, particle_B_velocity, aa, bb, Ks, Kd, mu, force)
+        Fine_contact.Contact_detection_GPU(particle_A_center_of_mass, particle_B_center_of_mass, particle_A_vertices,particle_B_vertices, particle_A_velocity, particle_B_velocity, particle_A_numvertices,particle_B_numvertices,particle_A_id,particle_B_id, Ks, Kd, mu, force,num_vertices_max)
 
     else:
         print('CPU')
-        Fine_contact.Contact_detection_GPU(particle_A_center_of_mass, particle_B_center_of_mass, particle_A_vertices,
-                                       particle_B_vertices, particle_A_velocity, particle_B_velocity, aa, bb, Ks, Kd, mu, force)
+        Fine_contact.Contact_detection_GPU(particle_A_center_of_mass, particle_B_center_of_mass, particle_A_vertices,particle_B_vertices, particle_A_velocity, particle_B_velocity, particle_A_numvertices,particle_B_numvertices,particle_A_id, particle_B_id, Ks, Kd, mu, force,num_vertices_max)
 
     # print(force)
 
@@ -277,8 +296,8 @@ for i in range(0, num_timesteps):
 
     # 4. External constraints
 
-    particle[1].force_normal = np.array([0, 0, 0])
-    particle[1].velocity = np.array([0, 0, 0])
+    #particle[1].force_normal = np.array([0, 0, 0])
+    #particle[1].velocity = np.array([0, 0, 0])
 
     end = time.time()
     if i % 1000 == 0:
