@@ -32,6 +32,7 @@ def gpu_contact_detection(calc_function, particle_A_center_of_mass,particle_B_ce
 	calc_function(cuda.In(particle_A_center_of_mass),cuda.In(particle_B_center_of_mass),cuda.In(particle_A_vertices),cuda.In(particle_B_vertices),cuda.In(particle_A_velocity),cuda.In(particle_B_velocity),cuda.In(particle_A_numvertices),cuda.In(particle_B_numvertices),cuda.In(particle_A_id),cuda.In(particle_B_id),cuda.InOut(force),cuda.In(num_pairs_P),cuda.InOut(pair_IDs),cuda.InOut(collision),cuda.InOut(pendepth),cuda.InOut(tochecki),block=block,grid=grid)
 	#print(pair_IDs)
 	#print(colltype)
+	print(pair_IDs)
 	print("Coll",collision)
 	print(pendepth)
 	return force,tempi,collision

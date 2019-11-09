@@ -332,21 +332,21 @@ inline __device__ void AddTriangle(const double3* V, int (*T)[3],double3* n,doub
 			else
 			{
 				////printf("kata1");
-				valid[triangle_id]=0;
+				valid[triangle_id]=-2;
 				dist[triangle_id]=1e30;
 			}
 		}
 		else
 		{
 			////printf("kata2");
-			valid[triangle_id]=0;	
+			valid[triangle_id]=-2;	
 			dist[triangle_id]=1e30;
 		}
 	}
 	else
 	{
 		//printf("kata3");
-		valid[triangle_id]=0;
+		valid[triangle_id]=-2;
 		dist[triangle_id]=1e30;
 	}
 	
@@ -461,7 +461,7 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 	//	kkkk=2;
 	while(xmin_old<Suj_proj_len)
 	{
-		//printf("counter: %d\n", counter);
+		printf("counter: %d\n", counter);
 		//printf("Vertices\n");
 		//for (int i = 0; i <num_vertices; i++) 
 		//{
@@ -519,7 +519,7 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 		//find out which triangles to delete (the ones with -1 are to be deleted)
 		for (int i=0;i<num_triangles;i++)
 		{
-			if (valid[i]==1 && (dot(V[num_vertices-1]-V[T[i][0]],n[i]))>=double(0))
+			if ((valid[i]==1 || valid[i]==-2) && (dot(V[num_vertices-1]-V[T[i][0]],n[i]))>=double(0))
 			{
 				valid[i]=-1;
 			}
@@ -546,17 +546,17 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 		
 		
 		
-		//////for (int i = 0; i <num_triangles; i++) 
-		//////{
-			//////printf("Triangle (valid): %d %d\n",i,valid[i]);
-			//////printf("%lf %d %d %d\n", dist[i],nr_vertices_del[T[i][0]],nr_vertices_del[T[i][1]],nr_vertices_del[T[i][2]]);	
+		for (int i = 0; i <num_triangles; i++) 
+		{
+			printf("Triangle (valid): %d %d\n",i,valid[i]);
+			printf("%lf %d %d %d\n", dist[i],nr_vertices_del[T[i][0]],nr_vertices_del[T[i][1]],nr_vertices_del[T[i][2]]);	
 
-			//////printf("%lf %lf %lf %d\n", V[T[i][0]].x,V[T[i][0]].y,V[T[i][0]].z,T[i][0]);	
-			//////printf("%lf %lf %lf %d\n", V[T[i][1]].x,V[T[i][1]].y,V[T[i][1]].z,T[i][1]);	
-			//////printf("%lf %lf %lf %d\n", V[T[i][2]].x,V[T[i][2]].y,V[T[i][2]].z,T[i][2]);	
-			//////printf("\n");
+			printf("%lf %lf %lf %d\n", V[T[i][0]].x,V[T[i][0]].y,V[T[i][0]].z,T[i][0]);	
+			printf("%lf %lf %lf %d\n", V[T[i][1]].x,V[T[i][1]].y,V[T[i][1]].z,T[i][1]);	
+			printf("%lf %lf %lf %d\n", V[T[i][2]].x,V[T[i][2]].y,V[T[i][2]].z,T[i][2]);	
+			printf("\n");
 
-		//////}
+		}
 		
 		//printf("\n");
 		//for (int i = 0; i <20; i++) 
@@ -837,10 +837,12 @@ __global__ void contact_detection(double particle_A_center_of_mass[{{num_pairs}}
 			collision[P]=coll;
 			//colltype[P]=8;
 
-			
+			//if (P==8)
+			//{
 			EPA(S1,aa1,bb1,S2,aa2,bb2,S3,aa3,bb3,S4,aa4,bb4,vertices_A,vertices_B,&pen_depth,num_vertices_A,num_vertices_B);
+			
 			pendepth[P]=pen_depth;
-
+			//}
 			return;
 		}
 		double3 S1uj;
