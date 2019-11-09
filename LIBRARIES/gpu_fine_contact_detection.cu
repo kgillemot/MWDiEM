@@ -459,7 +459,7 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 	//while(kkkk<2)
 	//{
 	//	kkkk=2;
-	while(xmin_old<Suj_proj_len)
+	while(xmin_old<Suj_proj_len) // && counter<4)
 	{
 		printf("counter: %d\n", counter);
 		//printf("Vertices\n");
@@ -525,38 +525,66 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 			}
 		}
 		
-		
-		//collect how many times an edge is used
-		int nr_vertices_del[100];
-		
+		//collect how many times an edge pair is used
+		int delpair[100][100];
 		for (int i=0;i<100;i++)
 		{
-			nr_vertices_del[i]=0;
+			for (int j=0;j<100;j++)
+			{
+				delpair[i][j]=0;
+			}
 		}
 		for (int i=0;i<num_triangles;i++)
 		{
 			if (valid[i]==-1)
 			{
-				for (int j=0;j<3;j++)
-				{
-					nr_vertices_del[T[i][j]]=nr_vertices_del[T[i][j]]+1;
-				}
+
+				delpair[T[i][1]][T[i][0]]=delpair[T[i][1]][T[i][0]]+1;
+
+				delpair[T[i][0]][T[i][1]]=delpair[T[i][0]][T[i][1]]+1;
+			
+				delpair[T[i][2]][T[i][1]]=delpair[T[i][2]][T[i][1]]+1;
+			
+				delpair[T[i][1]][T[i][2]]=delpair[T[i][1]][T[i][2]]+1;
+			
+				delpair[T[i][0]][T[i][2]]=delpair[T[i][0]][T[i][2]]+1;
+			
+				delpair[T[i][2]][T[i][0]]=delpair[T[i][2]][T[i][0]]+1;
 			}
 		}
 		
+		////collect how many times an edge is used
+		//int nr_vertices_del[100];
+		
+		//for (int i=0;i<100;i++)
+		//{
+			//nr_vertices_del[i]=0;
+		//}
+		//for (int i=0;i<num_triangles;i++)
+		//{
+			//if (valid[i]==-1)
+			//{
+				//for (int j=0;j<3;j++)
+				//{
+					//nr_vertices_del[T[i][j]]=nr_vertices_del[T[i][j]]+1;
+				//}
+			//}
+		//}
 		
 		
-		for (int i = 0; i <num_triangles; i++) 
-		{
-			printf("Triangle (valid): %d %d\n",i,valid[i]);
-			printf("%lf %d %d %d\n", dist[i],nr_vertices_del[T[i][0]],nr_vertices_del[T[i][1]],nr_vertices_del[T[i][2]]);	
+		if (counter==2)
+			for (int i = 0; i <num_triangles; i++) 
+			{
+				printf("Triangle (valid): %d %d\n",i,valid[i]);
+				//printf("%lf %d %d %d\n", dist[i],nr_vertices_del[T[i][0]],nr_vertices_del[T[i][1]],nr_vertices_del[T[i][2]]);	
+				printf("%lf %d %d %d\n", dist[i],delpair[T[i][0]][T[i][1]],delpair[T[i][1]][T[i][2]],delpair[T[i][2]][T[i][0]]);	
 
-			printf("%lf %lf %lf %d\n", V[T[i][0]].x,V[T[i][0]].y,V[T[i][0]].z,T[i][0]);	
-			printf("%lf %lf %lf %d\n", V[T[i][1]].x,V[T[i][1]].y,V[T[i][1]].z,T[i][1]);	
-			printf("%lf %lf %lf %d\n", V[T[i][2]].x,V[T[i][2]].y,V[T[i][2]].z,T[i][2]);	
-			printf("\n");
+				printf("%lf %lf %lf %d\n", V[T[i][0]].x,V[T[i][0]].y,V[T[i][0]].z,T[i][0]);	
+				printf("%lf %lf %lf %d\n", V[T[i][1]].x,V[T[i][1]].y,V[T[i][1]].z,T[i][1]);	
+				printf("%lf %lf %lf %d\n", V[T[i][2]].x,V[T[i][2]].y,V[T[i][2]].z,T[i][2]);	
+				printf("\n");
 
-		}
+			}
 		
 		//printf("\n");
 		//for (int i = 0; i <20; i++) 
@@ -564,13 +592,12 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 			//printf("%d %d\n", nr_vertices_del[i],i);
 		//}
 		
-
 		//create the new triangles
 		for (int i=0;i<num_triangles;i++)
 		{
 			if (valid[i]==-1)
 			{
-				if (nr_vertices_del[T[i][0]]-int(float(nr_vertices_del[T[i][0]])/2)!=0 && nr_vertices_del[T[i][1]]-int(float(nr_vertices_del[T[i][1]])/2)!=0)
+				if (delpair[T[i][0]][T[i][1]]<2)
 				//if (nr_vertices_del[T[i][0]]<2 && nr_vertices_del[T[i][1]]<2)		
 				{
 					edges[0]=T[i][0];
@@ -580,7 +607,8 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 					AddTriangle(V,T,n,dist,valid,edges,triangle_id);
 					num_triangles=num_triangles+1;
 				}
-				if (nr_vertices_del[T[i][1]]-int(float(nr_vertices_del[T[i][1]])/2)!=0 && nr_vertices_del[T[i][2]]-int(float(nr_vertices_del[T[i][2]])/2)!=0)
+				if (delpair[T[i][1]][T[i][2]]<2)
+				//if (nr_vertices_del[T[i][1]]-int(float(nr_vertices_del[T[i][1]])/2)!=0 && nr_vertices_del[T[i][2]]-int(float(nr_vertices_del[T[i][2]])/2)!=0)
 //				if (nr_vertices_del[T[i][1]]<2 && nr_vertices_del[T[i][2]]<2)
 				{
 					//edges[0]=T[todelete[i]][1];
@@ -591,7 +619,8 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 					AddTriangle(V,T,n,dist,valid,edges,triangle_id);
 					num_triangles=num_triangles+1;
 				}	
-				if (nr_vertices_del[T[i][2]]-int(float(nr_vertices_del[T[i][2]])/2)!=0 && nr_vertices_del[T[i][0]]-int(float(nr_vertices_del[T[i][0]])/2)!=0)
+				if (delpair[T[i][2]][T[i][0]]<2)
+				//if (nr_vertices_del[T[i][2]]-int(float(nr_vertices_del[T[i][2]])/2)!=0 && nr_vertices_del[T[i][0]]-int(float(nr_vertices_del[T[i][0]])/2)!=0)
 //				if (nr_vertices_del[T[i][2]]<2 && nr_vertices_del[T[i][0]]<2)
 				{
 
@@ -606,6 +635,50 @@ inline __device__ void  EPA(const double3 S1,const int aa1,const int bb1,const d
 				dist[i]=300000000;
 			}
 		}
+		
+		
+
+		//create the new triangles
+		//for (int i=0;i<num_triangles;i++)
+		//{
+			//if (valid[i]==-1)
+			//{
+				//if (nr_vertices_del[T[i][0]]-int(float(nr_vertices_del[T[i][0]])/2)!=0 && nr_vertices_del[T[i][1]]-int(float(nr_vertices_del[T[i][1]])/2)!=0)
+				////if (nr_vertices_del[T[i][0]]<2 && nr_vertices_del[T[i][1]]<2)		
+				//{
+					//edges[0]=T[i][0];
+					//edges[1]=T[i][1];
+					//edges[2]=num_vertices-1;
+					//triangle_id=num_triangles;
+					//AddTriangle(V,T,n,dist,valid,edges,triangle_id);
+					//num_triangles=num_triangles+1;
+				//}
+				//if (nr_vertices_del[T[i][1]]-int(float(nr_vertices_del[T[i][1]])/2)!=0 && nr_vertices_del[T[i][2]]-int(float(nr_vertices_del[T[i][2]])/2)!=0)
+////				if (nr_vertices_del[T[i][1]]<2 && nr_vertices_del[T[i][2]]<2)
+				//{
+					////edges[0]=T[todelete[i]][1];
+					//edges[0]=T[i][1];
+					//edges[1]=T[i][2];
+					//edges[2]=num_vertices-1;
+					//triangle_id=num_triangles;
+					//AddTriangle(V,T,n,dist,valid,edges,triangle_id);
+					//num_triangles=num_triangles+1;
+				//}	
+				//if (nr_vertices_del[T[i][2]]-int(float(nr_vertices_del[T[i][2]])/2)!=0 && nr_vertices_del[T[i][0]]-int(float(nr_vertices_del[T[i][0]])/2)!=0)
+////				if (nr_vertices_del[T[i][2]]<2 && nr_vertices_del[T[i][0]]<2)
+				//{
+
+					//edges[0]=T[i][2];
+					//edges[1]=T[i][0];
+					//edges[2]=num_vertices-1;
+					//triangle_id=num_triangles;
+					//AddTriangle(V,T,n,dist,valid,edges,triangle_id);
+					//num_triangles=num_triangles+1;
+				//}
+				//valid[i]=0;
+				//dist[i]=300000000;
+			//}
+		//}
 		
 	}
 	//printf("%lf",xmin_new);
@@ -837,7 +910,7 @@ __global__ void contact_detection(double particle_A_center_of_mass[{{num_pairs}}
 			collision[P]=coll;
 			//colltype[P]=8;
 
-			//if (P==8)
+			//if (P==7)
 			//{
 			EPA(S1,aa1,bb1,S2,aa2,bb2,S3,aa3,bb3,S4,aa4,bb4,vertices_A,vertices_B,&pen_depth,num_vertices_A,num_vertices_B);
 			
