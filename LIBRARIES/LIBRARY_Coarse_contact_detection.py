@@ -81,45 +81,93 @@ def Linked_cell(cell):
 								pairstocheck.append([cell[i][j][k][p],cell[i+l][j+m][k+n][q]])					
 	return(pairstocheck)
 	
-def Linked_cell_hash(particle,numcells):
+def Linked_cell_hash(particle,numcells_x,numcells_y,num_part_min,num_part_max,pairstocheck): #,wall_dict):
 	hashdict={}
-	for i in range(0,len(particle)):
+	for i in range(num_part_min,num_part_max):
 		hashdict[particle[i].particle_id] =particle[i].hashh
-	
 
 	rev_multidict = {}
 	for key, value in hashdict.items():
 		rev_multidict.setdefault(value, set()).add(key)
-	pairstocheck=[]
-	#print(rev_multidict)
-	for i in range(0,len(rev_multidict)):
-		#print(len(rev_multidict[i]))
-		if len(rev_multidict[i])>1:
-			for j in range(0,len(rev_multidict[i])):
-				for k in range(j+1,len(rev_multidict[i])):
-					pairstocheck.append([list(rev_multidict[i])[j],list(rev_multidict[i])[k]])
-		#print(pairstocheck)
+	
+	#def Merge(dict1, dict2): 
+	#	return(dict1.update(dict2)) 
+	#Merge(rev_multidict, wall_dict)
 
-		if i+1 in rev_multidict:
-			for j in range(0,len(rev_multidict[i])):
-				for k in range(0,len(rev_multidict[i+1])):
-					pairstocheck.append([list(rev_multidict[i])[j],list(rev_multidict[i+1])[k]])
-		#print(pairstocheck)
-					
-		if i+numcells in rev_multidict:
-			for j in range(0,len(rev_multidict[i])):
-				for k in range(0,len(rev_multidict[i+numcells])):
-					pairstocheck.append([list(rev_multidict[i])[j],list(rev_multidict[i+numcells])[k]])
-		#print(pairstocheck)
+	#print("kata",rev_multidict)
+	#pairstocheck=[]
+	
+	for key in rev_multidict:
+		if len(rev_multidict[key])>1:
+			for j in range(0,len(rev_multidict[key])):
+				for k in range(j+1,len(rev_multidict[key])):
+					pairstocheck.append([list(rev_multidict[key])[j],list(rev_multidict[key])[k]])
 			
-		if i+numcells**2 in rev_multidict:
-			for j in range(0,len(rev_multidict[i])):
-				for k in range(0,len(rev_multidict[i+numcells**2])):
-					pairstocheck.append([list(rev_multidict[i])[j],list(rev_multidict[i+numcells**2])[k]])
-		#print(pairstocheck)
+		if key+1 in rev_multidict:
+			for j in range(0,len(rev_multidict[key])):
+				for k in range(0,len(rev_multidict[key+1])):
+					pairstocheck.append([list(rev_multidict[key])[j],list(rev_multidict[key+1])[k]])
+		if key+numcells_x in rev_multidict:
+			for j in range(0,len(rev_multidict[key])):
+				for k in range(0,len(rev_multidict[key+numcells_x])):
+					pairstocheck.append([list(rev_multidict[key])[j],list(rev_multidict[key+numcells_x])[k]])
+		if key+numcells_x*numcells_y in rev_multidict:
+			for j in range(0,len(rev_multidict[key])):
+				for k in range(0,len(rev_multidict[key+numcells_x*numcells_y])):
+					pairstocheck.append([list(rev_multidict[key])[j],list(rev_multidict[key+numcells_x*numcells_y])[k]])
+	
+		if key+numcells_x*numcells_y+1 in rev_multidict:
+			for j in range(0,len(rev_multidict[key])):
+				for k in range(0,len(rev_multidict[key+numcells_x*numcells_y+1])):
+					pairstocheck.append([list(rev_multidict[key])[j],list(rev_multidict[key+numcells_x*numcells_y+1])[k]])
+		if key+numcells_x*numcells_y+1+numcells_x in rev_multidict:
+			for j in range(0,len(rev_multidict[key])):
+				for k in range(0,len(rev_multidict[key+numcells_x*numcells_y+1+numcells_x])):
+					pairstocheck.append([list(rev_multidict[key])[j],list(rev_multidict[key+numcells_x*numcells_y+1+numcells_x])[k]])
+		if key+numcells_x*numcells_y+numcells_x in rev_multidict:
+			for j in range(0,len(rev_multidict[key])):
+				for k in range(0,len(rev_multidict[key+numcells_x*numcells_y+numcells_x])):
+					pairstocheck.append([list(rev_multidict[key])[j],list(rev_multidict[key+numcells_x*numcells_y+numcells_x])[k]])
+		if key+numcells_x+1 in rev_multidict:
+			for j in range(0,len(rev_multidict[key])):
+				for k in range(0,len(rev_multidict[key+numcells_x+1])):
+					pairstocheck.append([list(rev_multidict[key])[j],list(rev_multidict[key+numcells_x+1])[k]])
+	#for i in range(0,len(rev_multidict)):
+		#if len(rev_multidict[i])>1:
+		#	for j in range(0,len(rev_multidict[i])):
+		#		for k in range(j+1,len(rev_multidict[i])):
+		#			pairstocheck.append([list(rev_multidict[i])[j],list(rev_multidict[i])[k]])
+		##print(pairstocheck)
+
+		#if i+1 in rev_multidict:
+			#for j in range(0,len(rev_multidict[i])):
+				#for k in range(0,len(rev_multidict[i+1])):
+					#pairstocheck.append([list(rev_multidict[i])[j],list(rev_multidict[i+1])[k]])
+		##print(pairstocheck)
+					
+		#if i+numcells in rev_multidict:
+			#for j in range(0,len(rev_multidict[i])):
+				#for k in range(0,len(rev_multidict[i+numcells])):
+					#pairstocheck.append([list(rev_multidict[i])[j],list(rev_multidict[i+numcells])[k]])
+		##print(pairstocheck)
+			
+		#if i+numcells**2 in rev_multidict:
+			#for j in range(0,len(rev_multidict[i])):
+				#for k in range(0,len(rev_multidict[i+numcells**2])):
+					#pairstocheck.append([list(rev_multidict[i])[j],list(rev_multidict[i+numcells**2])[k]])
+		##print(pairstocheck)
 					
 	return(pairstocheck)
-				
-				
+	
+#def Wall_hash(particle,num_part_max):		
+	#wall_dict={}
+	#for i in range(0,num_part_max):
+		#if particle[i].typee==0:
+			#for j in range(0,len(particle[i].hashh)):
+				#wall_dict.setdefault(particle[i].hashh[j], [])
+				#wall_dict[particle[i].hashh[j]].append(i)
+	
+	#return(wall_dict)
+
 
 	
