@@ -8,12 +8,13 @@ def Vtk_creator(particle,filename,num_part_min,num_part_max,quaternion_all_arr,d
 	vtk_out.write("DATASET POLYDATA\n")
 	num_points=0
 	
-	
 	for i in range(num_part_min,num_part_max):
 		particle[i].quaternion_all=quaternion_all_arr[i].copy()
+		particle[i].dx_all=dx_all_arr[i].copy()
 		particle[i].Rotator_quaternion_all()
+		particle[i].Translate_all()
 		quaternion_all_arr[i]=np.array([1,0,0,0])
-		
+		dx_all_arr[i]=np.array([0,0,0])
 		
 	
 	

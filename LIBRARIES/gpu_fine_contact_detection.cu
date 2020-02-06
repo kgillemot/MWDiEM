@@ -325,7 +325,26 @@ inline __device__ void AddTriangle(const float3* V, int (*T)[3],float3* n,float*
 }
 
 
-inline __device__ void  EPA(const float3 S1,const int aa1,const int bb1,const float3 S2,const int aa2,const int bb2,const float3 S3,const int aa3,const int bb3,const float3 S4,const int aa4,const int bb4,const float3* vertices_A,const float3* vertices_B,float* pen_depth, const int num_vertices_A,const int num_vertices_B,float3* cont_point_A,float3* cont_point_B, float3* pen_normal)
+inline __device__ void  EPA(const float3 S1,
+							const int aa1,
+							const int bb1,
+							const float3 S2,
+							const int aa2,
+							const int bb2,
+							const float3 S3,
+							const int aa3,
+							const int bb3,
+							const float3 S4,
+							const int aa4,
+							const int bb4,
+							const float3* vertices_A,
+							const float3* vertices_B,
+							float* pen_depth, 
+							const int num_vertices_A,
+							const int num_vertices_B,
+							float3* cont_point_A,
+							float3* cont_point_B, 
+							float3* pen_normal)
 {
 	//#include <cudart.h>
 	
@@ -583,72 +602,271 @@ inline __device__ void  EPA(const float3 S1,const int aa1,const int bb1,const fl
 
 }
 
+inline __device__ void Quat_inv(const float* quaternion, float* quaternion_inv)
+{
+	*quaternion_inv=*quaternion;
+	*(quaternion_inv+1)=*(quaternion+1)*(-1);
+	*(quaternion_inv+2)=*(quaternion+2)*(-1);
+	*(quaternion_inv+3)=*(quaternion+3)*(-1);
+}
+
+inline __device__ void Quat_mult(const float* quaternion1, const float* quaternion2, float* quaternion_mult)
+{
+	float3 vec1=make_float3(*(quaternion1+1),*(quaternion1+2),*(quaternion1+3));
+	float3 vec2=make_float3(*(quaternion2+1),*(quaternion2+2),*(quaternion2+3));
+	float3 quatsec=vec2*(*(quaternion1))+vec1*(*(quaternion2))+cross_product(vec1,vec2);
+	float quatfirst=*(quaternion1)*(*(quaternion2))-dot(vec1,vec2);
+	
+	*quaternion_mult=quatfirst;
+	*(quaternion_mult+1)=quatsec.x;
+	*(quaternion_mult+2)=quatsec.y;
+	*(quaternion_mult+3)=quatsec.z;
+}
+
+inline __device__ void Quat_tripl(const float* quaternion1, const float3 vector, const float* quaternion2, float3* vec_tripl)
+{
+	float vec_quat[4];
+	vec_quat[0]=0;
+	vec_quat[1]=vector.x;
+	vec_quat[2]=vector.y;
+	vec_quat[3]=vector.z;
+	
+	float quat_mult1[4];
+	Quat_mult(vec_quat,quaternion2,quat_mult1);
+	float quat_trip[4];
+	Quat_mult(quaternion1,quat_mult1,quat_trip);
+	float3 k=make_float3(0,0,0);
+	k.x=quat_trip[1];
+	k.y=quat_trip[2];
+	k.z=quat_trip[3];
+	*vec_tripl=k;
+}
 
 
-inline __device__ void Force(const float3 center_of_mass_A, const float3 center_of_mass_B, const float penetration_depth,float3 penetration_normal,const float3 contact_point_A,const float3 contact_point_B,const float Ks,const float Kd,const float Kt, const float mu,const float3 partA_vel,const float3 partB_vel,const float3 partA_angvel,const float3 partB_angvel, float* contacttime, float3* Fn_A,float3* Fn_As,float3* Fn_Ad,float3* TorqueA,float3* TorqueB)
+
+inline __device__ void Force(const float3 center_of_mass_A,
+                             const float3 center_of_mass_B, 
+                             const float penetration_depth,
+                             float3 penetration_normal,
+                             const float3 contact_point_A,
+                             const float3 contact_point_B,
+                             const float en,
+                             const float et, 
+                             const float en_wall,
+                             const float et_wall,
+                             const float3 partA_vel,
+                             const float3 partB_vel,
+                             const float3 partA_angvel,
+                             const float3 partB_angvel, 
+                             float3* displacement_t, 
+                             float3* Fn_A,
+                             float3* Fn_As,
+                             float3* Fn_Ad,
+                             float3* TorqueA,
+                             float3* TorqueB,
+                             float* quaterA,
+                             float* quaterB,
+                             float displ_tang_norm,
+                             const float mom_in_size_A,
+                             const float mom_in_size_B,
+                             const int wall)
 {	
 	//######### NORMAL FORCE ##############
-	// Ez valoszinuleg jo, de azert meg tesztelni kell
 	
-	*contacttime=2;	
-	if (dot(center_of_mass_B-center_of_mass_A,penetration_normal)<0.0)
+	float3 contpoint=make_float3(0,0,0);
+	contpoint=(contact_point_A-contact_point_B)/2;
+	float3 distA=contpoint-center_of_mass_A;
+	float3 distB=contpoint-center_of_mass_B;
+	float distA_norm=distA.x*distA.x+distA.y*distA.y+distA.z*distA.z;
+	float distB_norm=distB.x*distB.x+distB.y*distB.y+distB.z*distB.z;
+	
+	
+	// caluclate the constants
+	float pii=3.141592653589793;
+	float tc=0, tc_wall=0, Gn=0, Gn_wall=0, Kt=0, Kt_wall=0, Gt=0, Gt_wall=0;
+	
+	if (wall==0)
 	{
-		penetration_normal=penetration_normal*(-1.0);
-	}	
-	
-	//printf("%f %f %f\n",penetration_normal.x,penetration_normal.y,penetration_normal.z);
-	//printf("%f\n",penetration_depth);
-	
-	float3 uij=partA_vel+cross_product(partA_angvel,contact_point_A-center_of_mass_A)-partB_vel-cross_product(partB_angvel,contact_point_B-center_of_mass_B);
-	
-	//spring force
-
-	//float3 temp=penetration_normal*(Ks*pow(penetration_depth,3.0/2.0));
-	//printf("%f %f %f\n",temp.x,temp.y,temp.z);
-	*Fn_As=penetration_normal*(Ks*pow(penetration_depth,3.0/2.0));
-	//*Fn_As=temp;
-	if (dot(center_of_mass_B-center_of_mass_A,*Fn_As)>0.0)
-	{
-		*Fn_As=*Fn_As*(-1.0);
-	}
-	
-	//printf("%f\n",Ks);
-	//printf("kata %f %f %f\n",Fn_As[0],Fn_As[1],Fn_As[2]);
-	//printf("%f\n",penetration_normal.z*(Ks*pow(penetration_depth,3.0/2.0)));
-	
-	//damping force
-	float3 v_rel=partA_vel-partB_vel;
-	float3 v_rel_n=penetration_normal*dot(v_rel,penetration_normal);
-	*Fn_Ad=v_rel_n*(-1.0)*(Kd*pow(penetration_depth,1.0/2.0));
-	
-	//full normal force
-	
-	*Fn_A=*Fn_As+*Fn_Ad;
-	
-	
-	//########## TANGENTIAL FORCE ################
-
-	float3 v_t_rel=v_rel-v_rel_n;
-	//printf("%f\n",v_t_rel.x);
-	float Fn_A_norm=sqrt(dot(*Fn_A,*Fn_A));
-	float v_t_rel_norm=sqrt(dot(v_t_rel,v_t_rel));
-	float3 Ft_A;
-	
-	if (v_t_rel.x==0.0 && v_t_rel.y==0.0 && v_t_rel.z==0.0) 
-	{
-		Ft_A=make_float3(0.0,0.0,0.0);
+		tc=sqrt({{mu}}*(pii*pii+log(en)*log(en))/{{Kn}}); 
+		Gn=(-1)*2*{{mu}}/tc*log(en);
+		Kt={{Kn}}*(pii*pii+log(et)*log(et))/(pii*pii+log(en)*log(en))* 1/(1/{{mu}}+distA_norm/mom_in_size_A+distB_norm/mom_in_size_B);
+		Gt=(-1)*2/(1/{{mu}}+distA_norm/mom_in_size_A+distB_norm/mom_in_size_B)*log(et);
 	}
 	else
 	{
-		Ft_A=(v_t_rel/v_t_rel_norm*min(mu*Fn_A_norm,Kt*v_t_rel_norm))*(-1.0);
+		tc_wall=sqrt({{mu_wall}}*(pii*pii+log(en_wall)*log(en_wall))/{{Kn_wall}}); 
+		Gn_wall=(-1)*2*{{mu_wall}}/tc_wall*log(en_wall);
+		Kt_wall={{Kn_wall}}*(pii*pii+log(et_wall)*log(et_wall))/(pii*pii+log(en_wall)*log(en_wall))* 1/(1/{{mu_wall}}+distA_norm/mom_in_size_A+distB_norm/mom_in_size_B);	
+		Gt_wall=(-1)*2/(1/{{mu_wall}}+distA_norm/mom_in_size_A+distB_norm/mom_in_size_B)*log(et_wall);
 	}
 
-	float3 Ft_B=Ft_A*(-1.0);
+
+	//normalize the penetration vector just in case
+	if (dot(center_of_mass_B-center_of_mass_A,penetration_normal)<0.0)
+	{
+		penetration_normal=penetration_normal*(-1.0);
+	}
+	
+	//penetration_normal=penetration_normal*(-1.0);
+	
+	float penetration_normal_norm=sqrt(penetration_normal.x*penetration_normal.x+penetration_normal.y*penetration_normal.y+penetration_normal.z*penetration_normal.z);
+	penetration_normal=penetration_normal/penetration_normal_norm;	
+	
+	//normal and tangential contact times
+	float3 displacement_n=penetration_normal*penetration_depth;
+	
+	//relative velocities
+	float3 uij=partA_vel+cross_product(partA_angvel,contact_point_A-center_of_mass_A)-partB_vel-cross_product(partB_angvel,contact_point_B-center_of_mass_B);
+	float3 uijn=penetration_normal*dot(uij,penetration_normal);
+	float3 uijt=uij-uijn;
+	
+	//printf("%f %f %f \n", uijt.x, uijt.y,uijt.z);
+	
+	float uijt_norm=sqrt(uijt.x*uijt.x+uijt.y*uijt.y+uijt.z*uijt.z);
+
+
+	//tangential unit vector
+	float3 tij=make_float3(0,0,0);
+	if (uijt_norm!=0)
+	{
+		tij=uijt/uijt_norm;
+	}
+	if (uijt_norm==0 && displ_tang_norm!=0)
+	{
+		tij=*displacement_t/displ_tang_norm;
+	}
+
+	//normal force
+	
+	float3 Fijn=make_float3(0,0,0);
+	float3 Fn_Ass=make_float3(0,0,0);
+	float3 Fn_Add=make_float3(0,0,0);
+
+	if (wall==0)
+	{
+		Fijn=displacement_n*(-1)*{{Kn}}-uijn*Gn;
+		Fn_Ass=displacement_n*(-1)*{{Kn}};
+		Fn_Add=uijn*Gn;
+	}
+	else
+	{
+		Fijn=displacement_n*(-1)*{{Kn_wall}}-uijn*Gn_wall;
+		Fn_Ass=displacement_n*(-1)*{{Kn_wall}};
+		Fn_Add=uijn*Gn_wall;
+	}
+	//printf("%f %f %f \n", partA_vel.x, partA_vel.y,partA_vel.z);
+	//printf("%f %f %f %f %f %f\n", Fn_Ass.x, Fn_Ass.y, Fn_Ass.z, Fn_Add.x, Fn_Add.y, Fn_Add.z);
+	
+	float Fijn_norm=sqrt(Fijn.x*Fijn.x+Fijn.y*Fijn.y+Fijn.z*Fijn.z);
+	
+	*Fn_A=Fijn;
+	
+	
+	//tangential force
+	
+	float3 Fijt=make_float3(0,0,0);
+	float3 displacement_t_new=make_float3(0,0,0);
+	float Fijt_norm;
+	if (wall==0)
+	{
+		Fijt=(*displacement_t)*(-1)*Kt-uijt*Gt;
+		Fijt_norm=sqrt(Fijt.x*Fijt.x+Fijt.y*Fijt.y+Fijt.z*Fijt.z);
+		if (Fijt_norm>{{mu}}*Fijn_norm)
+		{
+			Fijt=tij*Fijn_norm*(-1)*{{mu}};
+		}	
+		if (Fijt_norm<={{mu}}*Fijn_norm)
+		{
+			float quaternion_inv[4];
+			Quat_inv(quaterA,quaternion_inv);
+			float3 displ_part1=make_float3(0,0,0);
+			Quat_tripl(quaterA, *displacement_t, quaternion_inv, &displ_part1);
+			displacement_t_new=displ_part1+uijt*{{timestep}};	
+		}
+		else
+		{
+			displacement_t_new=(tij*Fijn_norm*{{mu}}*(-1)-uijt*Gt)*1/Kt;
+		}
+	}	
+	else
+	{
+		Fijt=(*displacement_t)*(-1)*Kt_wall-uijt*Gt_wall;
+		Fijt_norm=sqrt(Fijt.x*Fijt.x+Fijt.y*Fijt.y+Fijt.z*Fijt.z);
+		if (Fijt_norm>{{mu_wall}}*Fijn_norm)
+		{
+			Fijt=tij*Fijn_norm*(-1)*{{mu_wall}};
+		}
+		if (Fijt_norm<={{mu_wall}}*Fijn_norm)
+		{
+			float quaternion_inv[4];
+			Quat_inv(quaterA,quaternion_inv);
+			float3 displ_part1=make_float3(0,0,0);
+			Quat_tripl(quaterA, *displacement_t, quaternion_inv, &displ_part1);
+			displacement_t_new=displ_part1+uijt*{{timestep}};	
+		}
+		else
+		{
+			displacement_t_new=(tij*Fijn_norm*{{mu_wall}}*(-1)-uijt*Gt_wall)*1/Kt_wall;
+		}	
+	}
+	*displacement_t=displacement_t_new;	
+	
+	//torque
+	float3 Ffull=make_float3(0,0,0);
+	Ffull=Fijt+Fijn;
+	float3 aaaa=make_float3(0,0,0);
+	aaaa=contpoint-center_of_mass_A;
+	
+	*TorqueA=cross_product(contpoint-center_of_mass_A,Ffull);  //   +*Fn_A);
+	*TorqueB=cross_product(contpoint-center_of_mass_B,Ffull*(-1)); //-*Fn_A);
+	
+	//printf("%f %f %f %f %f %f\n", TorqueA[0], TorqueA[1], TorqueA[2], Fijn.x, Fijn.y, Fijn.z);
+	
+	////sprig_force
+
+
+	//*Fn_As=penetration_normal*(Ks*pow(penetration_depth,3.0/2.0));
+
+	//if (dot(center_of_mass_B-center_of_mass_A,*Fn_As)>0.0)
+	//{
+		//*Fn_As=*Fn_As*(-1.0);
+	//}
+	
+
+	
+	////damping force
+	//float3 v_rel=partA_vel-partB_vel;
+	//float3 v_rel_n=penetration_normal*dot(v_rel,penetration_normal);
+	//*Fn_Ad=v_rel_n*(-1.0)*(Kd*pow(penetration_depth,1.0/2.0));
+	
+	////full normal force
+	
+	//*Fn_A=*Fn_As+*Fn_Ad;
+	
+	
+	////########## TANGENTIAL FORCE ################
+
+	//float3 v_t_rel=v_rel-v_rel_n;
+	////printf("%f\n",v_t_rel.x);
+	//float Fn_A_norm=sqrt(dot(*Fn_A,*Fn_A));
+	//float v_t_rel_norm=sqrt(dot(v_t_rel,v_t_rel));
+	//float3 Ft_A;
+	
+	//if (v_t_rel.x==0.0 && v_t_rel.y==0.0 && v_t_rel.z==0.0) 
+	//{
+		//Ft_A=make_float3(0.0,0.0,0.0);
+	//}
+	//else
+	//{
+		//Ft_A=(v_t_rel/v_t_rel_norm*min(mu*Fn_A_norm,Kt*v_t_rel_norm))*(-1.0);
+	//}
+
+	//float3 Ft_B=Ft_A*(-1.0);
 	
 	//########### TORQUE #########################
 	
-	*TorqueA=cross_product(contact_point_A-center_of_mass_A,Ft_A);  //   +*Fn_A);
-	*TorqueB=cross_product(contact_point_B-center_of_mass_B,Ft_B); //-*Fn_A);
+	//*TorqueA=cross_product(contact_point_A-center_of_mass_A,Ft_A);  //   +*Fn_A);
+	//*TorqueB=cross_product(contact_point_B-center_of_mass_B,Ft_B); //-*Fn_A);
 
 }
 
@@ -665,15 +883,18 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
                                 int* particle_B_numvertices,
                                 int* particle_A_id,
                                 int* particle_B_id,
-                                float* particle_contacttime,
+                                float* displacement_tang,
                                 float* force,
                                 float* torque,
+                                float quaternion_A[{{num_pairs}}][4],
+                                float quaternion_B[{{num_pairs}}][4],
                                 int* num_pairs_P,
                                 int* pair_IDs,
                                 int* collision,
-								float* pendepth,
-                                float* tochecki)
-                                
+                                float* mom_inertia_size_A,
+                                float* mom_inertia_size_B)
+								//float* pendepth)
+                                //float* tochecki)
                                 //#float tempi[3][3][3],
                                 
 {
@@ -690,23 +911,47 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 	// Center of mass
 	const float3 center_of_mass_A = make_float3(particle_A_center_of_mass[P][0],particle_A_center_of_mass[P][1],particle_A_center_of_mass[P][2]);
 	const float3 center_of_mass_B = make_float3(particle_B_center_of_mass[P][0],particle_B_center_of_mass[P][1],particle_B_center_of_mass[P][2]);
+	
+
 
 	//// Velocity
 	const float3 velocity_A = make_float3(particle_A_velocity[P][0],particle_A_velocity[P][1],particle_A_velocity[P][2]);
 	const float3 velocity_B = make_float3(particle_B_velocity[P][0],particle_B_velocity[P][1],particle_B_velocity[P][2]);
 	
+
+	
 	const float3 angular_velocity_A = make_float3(particle_A_angular_velocity[P][0],particle_A_angular_velocity[P][1],particle_A_angular_velocity[P][2]);
 	const float3 angular_velocity_B = make_float3(particle_B_angular_velocity[P][0],particle_B_angular_velocity[P][1],particle_B_angular_velocity[P][2]);
+
+	//printf("%f %f %f \n", angular_velocity_A.x, angular_velocity_A.y,angular_velocity_A.z);
+	//printf("%f %f %f \n", angular_velocity_B.x, angular_velocity_B.y,angular_velocity_B.z);
 
 	// Particle id
 	const int part_id_A = particle_A_id[P];
 	const int part_id_B = particle_B_id[P];
 	
+	//printf("%d\n",part_id_A);
+	//printf("%d\n",part_id_B);
+	
+	//Quaternion
+	float quaterA[4];
+	quaterA[0]=quaternion_A[P][0];
+	quaterA[1]=quaternion_A[P][1];
+	quaterA[2]=quaternion_A[P][2];
+	quaterA[3]=quaternion_A[P][3];
+	
+	
+	float quaterB[4];
+	quaterB[0]=quaternion_B[P][0];
+	quaterB[1]=quaternion_B[P][1];
+	quaterB[2]=quaternion_B[P][2];
+	quaterB[3]=quaternion_B[P][3];
 
 
 	// Number of real vertices
 	const int num_vertices_A = particle_A_numvertices[P];
 	const int num_vertices_B = particle_B_numvertices[P];
+	
 
 	// Vertices array
 	const float3* vertices_A = (float3*)((void*)particle_A_vertices[P]);
@@ -714,6 +959,8 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 	//float3 vertices_A[{{num_vertices_max}}];
 	//for (int i = 0; i < num_vertices_A; i++)
 		//vertices_A[i]=make_float3(particle_A_vertices[P][i][0],particle_A_vertices[P][i][1],particle_A_vertices[P][i][2]);
+		
+		
 	
 	// Force
 	//float3 local_force_normal = make_float3(force[P*3+0],force[P*3+1],force[P*3+2]);
@@ -722,13 +969,30 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 	float3 local_torque_A=make_float3(0.0,0.0,0.0);
 	float3 local_torque_B=make_float3(0.0,0.0,0.0);
 	
-	float contime=particle_contacttime[P];
+	
+	float3 displ_tang=make_float3(0,0,0);
+	displ_tang.x=displacement_tang[P+0];
+	displ_tang.y=displacement_tang[P+1];
+	displ_tang.z=displacement_tang[P+2];
+	float displ_tang_norm=sqrt(displ_tang.x*displ_tang.x+displ_tang.y*displ_tang.y+displ_tang.z*displ_tang.z);
+	
+	const float mom_in_size_A=mom_inertia_size_A[P];
+	const float mom_in_size_B=mom_inertia_size_B[P];
+
+	
 	
 	// Pair IDs
 	pair_IDs[2*P]=part_id_A;
 	pair_IDs[2*P+1]=part_id_B;
 
-	
+	///////////////////////////////////////////////
+
+	int wall=0;
+	if (part_id_A<{{num_particles_wall}} || part_id_B<{{num_particles_wall}})
+	{
+		wall=1;
+	}
+
 	////////////////////////////////////// GJK
 
 	int coll=-1;
@@ -745,13 +1009,16 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 	//Single point
 	const float3 d1=center_of_mass_B-center_of_mass_A;	
 	Support_funtion(vertices_A,vertices_B,num_vertices_A,num_vertices_B,d1,&S1,&aa1,&bb1);
-	tochecki[P]=bb1;
+	//tochecki[P]=bb1;
 	if (dot(d1,S1)<0.0)
 	{
 		//no collision
 		coll=0;
 		collision[P]=coll;
-		particle_contacttime[P]=0;
+		displacement_tang[P]=0;
+		displacement_tang[P+1]=0;
+		displacement_tang[P+2]=0;
+		displacement_tang[P+3]=0;
 		return;
 	}
 
@@ -763,7 +1030,10 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 		//no collision LINE SAT
 		coll=0;
 		collision[P]=coll;
-		particle_contacttime[P]=0;
+		displacement_tang[P]=0;
+		displacement_tang[P+1]=0;
+		displacement_tang[P+2]=0;
+		displacement_tang[P+3]=0;
 		return;
 	}
 
@@ -774,7 +1044,10 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 		// NO COLLISION Line Voronoi
 		coll=0;
 		collision[P]=coll;
-		particle_contacttime[P]=0;
+		displacement_tang[P]=0;
+		displacement_tang[P+1]=0;
+		displacement_tang[P+2]=0;
+		displacement_tang[P+3]=0;
 		return;
 	}
 
@@ -785,7 +1058,10 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 		//no collision Triangle SAT
 		coll=0;
 		collision[P]=coll;
-		particle_contacttime[P]=0;
+		displacement_tang[P]=0;
+		displacement_tang[P+1]=0;
+		displacement_tang[P+2]=0;
+		displacement_tang[P+3]=0;
 		return;
 	}
 
@@ -796,7 +1072,10 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 		// NO COLLISION Triangle Voronoi
 		coll=0;
 		collision[P]=coll;
-		particle_contacttime[P]=0;
+		displacement_tang[P]=0;
+		displacement_tang[P+1]=0;
+		displacement_tang[P+2]=0;
+		displacement_tang[P+3]=0;
 		return;
 	}
 
@@ -830,7 +1109,10 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 		{
 			coll=0;
 			collision[P]=coll;
-			particle_contacttime[P]=0;
+			displacement_tang[P]=0;
+			displacement_tang[P+1]=0;
+			displacement_tang[P+2]=0;
+			displacement_tang[P+3]=0;
 			return;
 		}
 		
@@ -845,13 +1127,38 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 				Support_funtion(vertices_A,vertices_B,num_vertices_A,num_vertices_B,d4,&S4,&aa4,&bb4);
 			}
 			collision[P]=coll;
-			EPA(S1,aa1,bb1,S2,aa2,bb2,S3,aa3,bb3,S4,aa4,bb4,vertices_A,vertices_B,&pen_depth,num_vertices_A,num_vertices_B,&contpointA,&contpointB,&pen_normal);
-			Force(center_of_mass_A,center_of_mass_B,pen_depth,pen_normal,contpointA,contpointB,{{Ks}},{{Kd}},{{Kt}},{{mu}},velocity_A,velocity_B,angular_velocity_A,angular_velocity_B, &contime,&Fn_A, &Fn_As, &Fn_Ad, &TorqueA, &TorqueB);			
+			EPA(S1,              aa1,            bb1,
+			    S2,              aa2,            bb2,
+			    S3,              aa3,            bb3,
+			    S4,              aa4,            bb4, 
+			    vertices_A,      vertices_B,     &pen_depth,
+			    num_vertices_A,  num_vertices_B, &contpointA,
+			    &contpointB,     &pen_normal);
+			
+			Force(center_of_mass_A,    center_of_mass_B,
+			      pen_depth, 		   pen_normal,
+			      contpointA,          contpointB,     		   
+				  {{en}},              {{et}}, 
+				  {{en_wall}},		   {{et_wall}},          
+				  velocity_A,          velocity_B,            
+				  angular_velocity_A,  angular_velocity_B,
+				  &displ_tang,           
+				  &Fn_A,               &Fn_As,                &Fn_Ad,                
+				  &TorqueA,            &TorqueB,			  
+				  quaterA,			   quaterB,		       
+				  displ_tang_norm, 	  
+				  mom_in_size_A,	   mom_in_size_B,
+				  wall);
+				  				
+				  			
 			local_force_normal=Fn_A;
 			local_torque_A=TorqueA;
 			local_torque_B=TorqueB;
-			pendepth[P]=pen_depth;
-			particle_contacttime[P]=contime;
+			//pendepth[P]=pen_depth;
+			displacement_tang[P]=displ_tang.x;
+			displacement_tang[P+1]=displ_tang.y;
+			displacement_tang[P+2]=displ_tang.z;
+			displacement_tang[P+3]=1;
 			break;
 		}
 		
@@ -860,7 +1167,10 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 		{
 			coll=0;
 			collision[P]=coll;
-			particle_contacttime[P]=0;
+			displacement_tang[P]=0;
+			displacement_tang[P+1]=0;
+			displacement_tang[P+2]=0;
+			displacement_tang[P+3]=0;
 			return;
 		}
 		
@@ -876,18 +1186,44 @@ __global__ void contact_detection(float particle_A_center_of_mass[{{num_pairs}}]
 			collision[P]=coll;
 			//if (P==17)
 			//{
-			EPA(S1,aa1,bb1,S2,aa2,bb2,S3,aa3,bb3,S4,aa4,bb4,vertices_A,vertices_B,&pen_depth,num_vertices_A,num_vertices_B,&contpointA,&contpointB,&pen_normal);	
-			Force(center_of_mass_A,center_of_mass_B,pen_depth,pen_normal,contpointA,contpointB,{{Ks}},{{Kd}},{{Kt}},{{mu}},velocity_A,velocity_B,angular_velocity_A,angular_velocity_B,&contime, &Fn_A, &Fn_As, &Fn_Ad, &TorqueA, &TorqueB);
+			EPA(S1,             aa1,             bb1,
+			    S2,             aa2,             bb2,
+			    S3,             aa3,             bb3,
+			    S4,             aa4,             bb4,
+			    vertices_A,     vertices_B,      &pen_depth,
+			    num_vertices_A, num_vertices_B,  &contpointA,
+			    &contpointB,    &pen_normal);	
+			    
+			Force(center_of_mass_A,    center_of_mass_B,
+			      pen_depth, 		   pen_normal,
+			      contpointA,          contpointB,    		   
+				  {{en}},              {{et}}, 
+				  {{en_wall}},		   {{et_wall}},           
+				  velocity_A,          velocity_B,            
+				  angular_velocity_A,  angular_velocity_B,
+				  &displ_tang,           
+				  &Fn_A,               &Fn_As,                &Fn_Ad,                
+				  &TorqueA,            &TorqueB,			  
+				  quaterA,			   quaterB,		       
+				  displ_tang_norm, 	  
+				  mom_in_size_A,	   mom_in_size_B,
+				  wall);
+			      
 			local_force_normal=Fn_A;
 			local_torque_A=TorqueA;
 			local_torque_B=TorqueB;
+			
 			//printf("Norm_force: %d %f %f %f\n",P, local_force_normal.x,local_force_normal.y,local_force_normal.z);
 			//printf("Norm_torque: %d %f %f %f\n",P, local_torque_A.x,local_torque_A.y,local_torque_A.z);
 			//printf("Cont pointt A: %d %f %f %f\n",P, contpointA.x,contpointA.y,contpointA.z);
 			//printf("Cont point B: %d %f %f %f\n",P, contpointB.x,contpointB.y,contpointB.z);
 			//}
-			pendepth[P]=pen_depth;
-			particle_contacttime[P]=contime;
+			//pendepth[P]=pen_depth;
+			displacement_tang[P]=displ_tang.x;
+			displacement_tang[P+1]=displ_tang.y;
+			displacement_tang[P+2]=displ_tang.z;
+			displacement_tang[P+3]=1;
+			
 			break;
 		}
 

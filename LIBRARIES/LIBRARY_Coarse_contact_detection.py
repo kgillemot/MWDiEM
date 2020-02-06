@@ -81,22 +81,17 @@ def Linked_cell(cell):
 								pairstocheck.append([cell[i][j][k][p],cell[i+l][j+m][k+n][q]])					
 	return(pairstocheck)
 	
-def Linked_cell_hash(particle,numcells_x,numcells_y,num_part_min,num_part_max,pairstocheck): #,wall_dict):
+def Linked_cell_hash(particle,numcells_x,numcells_y,num_part_min,num_part_max,pairstocheck,hashh_arr): #,wall_dict):
 	hashdict={}
 	for i in range(num_part_min,num_part_max):
-		hashdict[particle[i].particle_id] =particle[i].hashh
+		#hashdict[particle[i].particle_id] =particle[i].hashh
+		hashdict[particle[i].particle_id] =hashh_arr[i]
+	#print(hashdict)
 
 	rev_multidict = {}
 	for key, value in hashdict.items():
 		rev_multidict.setdefault(value, set()).add(key)
-	
-	#def Merge(dict1, dict2): 
-	#	return(dict1.update(dict2)) 
-	#Merge(rev_multidict, wall_dict)
 
-	#print("kata",rev_multidict)
-	#pairstocheck=[]
-	
 	for key in rev_multidict:
 		if len(rev_multidict[key])>1:
 			for j in range(0,len(rev_multidict[key])):

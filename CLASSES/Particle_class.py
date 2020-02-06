@@ -52,6 +52,8 @@ class Particle(object):
 		self.quaternion_12=np.array([1,0,0,0])
 		self.quaternion_all=np.array([1,0,0,0])
 		
+		self.dx_all=np.array([0,0,0])
+		
 	
 	
 	########################### PARTICLE GEOMETRICAL PROPERTIES #####################################
@@ -133,7 +135,6 @@ class Particle(object):
 			E=self.faces[i].face_vertices[1]
 			F=self.faces[i].face_vertices[2]
 			deltaV=np.dot(D,self.faces[i].face_normal)/6
-			#print("deltav",deltaV)
 			Pxx=Pxx+density*deltaV/20*(2*D[0]*D[0]+2*E[0]*E[0]+2*F[0]*F[0]+D[0]*E[0]+D[0]*E[0]+D[0]*F[0]+D[0]*F[0]+E[0]*F[0]+E[0]*F[0])
 			Pxy=Pxy+density*deltaV/20*(2*D[0]*D[1]+2*E[0]*E[1]+2*F[0]*F[1]+D[0]*E[1]+D[1]*E[0]+D[0]*F[1]+D[1]*F[0]+E[0]*F[1]+E[1]*F[0])
 			Pxz=Pxz+density*deltaV/20*(2*D[0]*D[2]+2*E[0]*E[2]+2*F[0]*F[2]+D[0]*E[2]+D[2]*E[0]+D[0]*F[2]+D[2]*F[0]+E[0]*F[2]+E[2]*F[0])
@@ -147,10 +148,12 @@ class Particle(object):
 		Ixz=-Pxz
 		Ixy=-Pxy	
 		I=np.array([[Ixx,Ixy,Ixz],[Ixy,Iyy,Iyz],[Ixz,Iyz,Izz]])	
+		I_size=1/3*(Ixx+Iyy+Izz)
 		if np.isfinite(np.linalg.cond(I))==False:
+			print(I)
 			print("Singular matrix, ohoh!")
 
-		return(I)	
+		return(I,I_size)	
 	
 	#################### PARTICLE CREATORS ################################################################
 	def Translate(self,transl):
@@ -176,7 +179,8 @@ class Particle(object):
 			self.faces[i].face_vertices[2][0]+=translx
 			self.faces[i].face_vertices[2][1]+=transly
 			self.faces[i].face_vertices[2][2]+=translz
-	
+			
+
 		
 	def Random_convex_polygon_maker_3D(self,num_vertices_min,num_vertices_max,min_radius,max_radius):
 		
@@ -226,7 +230,8 @@ class Particle(object):
 		self.density=density
 			
 		#MOMENT OF INERTIA
-		self.moment_of_inertia=self.Calc_inertia(self.density)
+		self.moment_of_inertia=self.Calc_inertia(self.density)[0]
+		self.moment_of_inertia_size=self.Calc_inertia(self.density)[1]
 
 		#CALCULATE MASS
 		self.mass=self.density*self.volume
@@ -280,10 +285,11 @@ class Particle(object):
 		self.density=density
 			
 		#MOMENT OF INERTIA
-		self.moment_of_inertia=self.Calc_inertia(self.density)
+		self.moment_of_inertia=self.Calc_inertia(self.density)[0]
 		self.eig=np.linalg.eig(self.moment_of_inertia)
 		self.moment_of_inertia_bf=np.array([[self.eig[0][0],0,0],[0,self.eig[0][1],0],[0,0,self.eig[0][2]]])
 		self.moment_of_inertia_bf_inv=np.linalg.inv(self.moment_of_inertia_bf)
+		self.moment_of_inertia_size=self.Calc_inertia(self.density)[1]
 		
 		#CALCULATE MASS
 		self.mass=self.density*self.volume
@@ -294,8 +300,9 @@ class Particle(object):
 		self.force_external=self.mass*acc_ext_def
 		self.torque_external=torq_ext_def
 		
+		self.normvec=np.array([0,0,1])
 
-	def Cube_maker_3D(self,side_length):
+	def Cube_maker_3D(self,side_length,density,typee,acc_ext_def,torq_ext_def):
 		
 		#CREATE POLYGON
 		polyhedra=[]
@@ -344,12 +351,23 @@ class Particle(object):
 		
 		#DENSITY
 		self.density=density
-			
 		#MOMENT OF INERTIA
-		self.moment_of_inertia=self.Calc_inertia(self.density)
+		self.moment_of_inertia=self.Calc_inertia(self.density)[0]
+		self.eig=np.linalg.eig(self.moment_of_inertia)
+		self.moment_of_inertia_bf=np.array([[self.eig[0][0],0,0],[0,self.eig[0][1],0],[0,0,self.eig[0][2]]])
+		self.moment_of_inertia_bf_inv=np.linalg.inv(self.moment_of_inertia_bf)
+		self.moment_of_inertia_size=self.Calc_inertia(self.density)[1]
 		
 		#CALCULATE MASS
 		self.mass=self.density*self.volume
+		
+		self.typee=typee
+		
+		#print(self.mass)
+		self.force_external=self.mass*acc_ext_def
+		self.torque_external=torq_ext_def
+
+		self.normvec=np.array([0,0,1])
 		
 		
 	def Plane_maker_3D(self,size_plane_x,size_plane_y,size_plane_z,density,max_particlesize,typee,acc_ext_def,torq_ext_def):
@@ -421,20 +439,18 @@ class Particle(object):
 		
 		#MOMENT OF INERTIA
 		#MOMENT OF INERTIA
-		self.moment_of_inertia=self.Calc_inertia(self.density)
+		self.moment_of_inertia=self.Calc_inertia(self.density)[0]
 		self.eig=np.linalg.eig(self.moment_of_inertia)
 		self.moment_of_inertia_bf=np.array([[self.eig[0][0],0,0],[0,self.eig[0][1],0],[0,0,self.eig[0][2]]])
 		self.moment_of_inertia_bf_inv=np.linalg.inv(self.moment_of_inertia_bf)
-
+		self.moment_of_inertia_size=self.Calc_inertia(self.density)[1]
 		
 		#CALCULATE MASS
 		self.mass=self.density*self.volume
 		
 		#PLANE NORMAL VECTOR
-		slope_angle = 19.1 #[deg]
-		slope_angle_rad=slope_angle*np.pi/180
 		#self.normvec=[0,0,1]
-		self.normvec=np.array([-math.sin(slope_angle_rad),0,math.cos(slope_angle_rad)]) 
+		self.normvec=np.array([0,0,1]) 
 		
 		self.maxsize=math.sqrt(math.sqrt(size_plane_x**2/4+size_plane_y**2/4)+size_plane_z**2/4)
 		
@@ -516,7 +532,7 @@ class Particle(object):
 			self.faces[i].face_vertices[1]=Rota(angle,axis,self.faces[i].face_vertices[1]-self.center_of_mass)+self.center_of_mass
 			self.faces[i].face_vertices[2]=Rota(angle,axis,self.faces[i].face_vertices[2]-self.center_of_mass)+self.center_of_mass
 			self.faces[i].face_normal=Rota(angle,axis,self.faces[i].face_normal)
-			
+		self.normvec=Rota(angle,axis,self.normvec)
 		#self.quaternion=[np.cos(angle/2),np.sin(angle/2)*axis[0],np.sin(angle/2)*axis[1],np.sin(angle/2)*axis[2]]
 		
 	def Rotator_quaternion(self,quaternion):
@@ -526,6 +542,7 @@ class Particle(object):
 		
 		for i in range(0,self.num_vertices):
 			self.vertices[i].vertex_coo=Rotaa(quaternion,(self.vertices[i].vertex_coo-self.center_of_mass))+self.center_of_mass
+			#print("CPU v-c", self.vertices[i].vertex_coo)
 		#for i in range(0,self.num_faces):
 			#self.faces[i].face_vertices[0]=Rotaa(quaternion,self.faces[i].face_vertices[0]-self.center_of_mass)+self.center_of_mass
 			#self.faces[i].face_vertices[1]=Rotaa(quaternion,self.faces[i].face_vertices[1]-self.center_of_mass)+self.center_of_mass
@@ -545,6 +562,32 @@ class Particle(object):
 			self.faces[i].face_vertices[2]=Rotaa(self.quaternion_all,self.faces[i].face_vertices[2]-self.center_of_mass)+self.center_of_mass
 			self.faces[i].face_normal=Rotaa(self.quaternion_all,self.faces[i].face_normal)		
 		self.quaternion_all=np.array([1,0,0,0])
+		
+		
+	def Translate_all(self):
+		translx=self.dx_all[0]
+		transly=self.dx_all[1]
+		translz=self.dx_all[2]
+		for i in range(0,self.num_vertices):
+			self.vertices[i].vertex_coo[0]=self.vertices[i].vertex_coo[0]+translx
+			self.vertices[i].vertex_coo[1]=self.vertices[i].vertex_coo[1]+transly
+			self.vertices[i].vertex_coo[2]=self.vertices[i].vertex_coo[2]+translz
+		self.center_of_mass[0]=self.center_of_mass[0]+translx
+		self.center_of_mass[1]=self.center_of_mass[1]+transly
+		self.center_of_mass[2]=self.center_of_mass[2]+translz
+		for i in range(0,self.num_faces):
+			self.faces[i].face_vertices[0][0]+=translx
+			self.faces[i].face_vertices[0][1]+=transly
+			self.faces[i].face_vertices[0][2]+=translz
+			
+			self.faces[i].face_vertices[1][0]+=translx
+			self.faces[i].face_vertices[1][1]+=transly
+			self.faces[i].face_vertices[1][2]+=translz
+		
+			self.faces[i].face_vertices[2][0]+=translx
+			self.faces[i].face_vertices[2][1]+=transly
+			self.faces[i].face_vertices[2][2]+=translz
+		self.dx_all=np.array([0,0,0])
 			
 	#def Rotator_initial(self, angle, axis_normalvect):
 		#I=np.identity(3)

@@ -15,40 +15,108 @@ def gpu_contact_detection_init(**args):
 	return mod.get_function("contact_detection")
 
 
-def gpu_contact_detection(calc_function, particle_A_center_of_mass,particle_B_center_of_mass,particle_A_vertices,particle_B_vertices,particle_A_velocity,particle_B_velocity,particle_A_angular_velocity, particle_B_angular_velocity, particle_A_numvertices,particle_B_numvertices,particle_A_id,particle_B_id,particle_contacttime,force,torque):
+def gpu_contact_detection(calc_function,         particle_A_center_of_mass,             particle_B_center_of_mass,\
+						  particle_A_vertices,   particle_B_vertices,                   particle_A_velocity,\
+						  particle_B_velocity,   particle_A_angular_velocity,           particle_B_angular_velocity,\
+						  particle_A_numvertices,particle_B_numvertices,                particle_A_id,\
+						  particle_B_id,         displacement_tang,                     force,\
+						  torque, 				 quaternion_A, 							quaternion_B,\
+						  mom_inertia_size_A,	 mom_inertia_size_B):
 
 	num_pairs_P = np.asarray(particle_A_center_of_mass.shape[0], dtype=np.int32)  
 	tempi = np.zeros(shape = (3,3,3), dtype=np.float32 )
 	block = (64, 1, 1)
 	grid = (int(num_pairs_P / 1024 / 64 + 1),1024) #ez a jobb valszeg
+	
 	collision=np.zeros(shape=particle_A_center_of_mass.shape[0], dtype=np.int32)
-	pendepth=np.zeros(shape=particle_A_center_of_mass.shape[0], dtype=np.float32)
-	tochecki=np.zeros(shape=particle_A_center_of_mass.shape[0], dtype=np.float32)
+	#pendepth=np.zeros(shape=particle_A_center_of_mass.shape[0], dtype=np.float32)
 	pair_IDs=np.zeros(shape=(particle_A_center_of_mass.shape[0],2), dtype=np.int32)
-	calc_function(cuda.In(particle_A_center_of_mass),cuda.In(particle_B_center_of_mass),cuda.In(particle_A_vertices),cuda.In(particle_B_vertices),cuda.In(particle_A_velocity),cuda.In(particle_B_velocity),cuda.In(particle_A_angular_velocity), cuda.In(particle_B_angular_velocity),cuda.In(particle_A_numvertices),cuda.In(particle_B_numvertices),cuda.In(particle_A_id),cuda.In(particle_B_id),cuda.InOut(particle_contacttime),cuda.InOut(force),cuda.InOut(torque),cuda.In(num_pairs_P),cuda.InOut(pair_IDs),cuda.InOut(collision),cuda.InOut(pendepth),cuda.InOut(tochecki),block=block,grid=grid)
+	
+	calc_function(cuda.In(particle_A_center_of_mass),\
+	              cuda.In(particle_B_center_of_mass),\
+	              cuda.In(particle_A_vertices),\
+	              cuda.In(particle_B_vertices),\
+	              cuda.In(particle_A_velocity),\
+	              cuda.In(particle_B_velocity),\
+	              cuda.In(particle_A_angular_velocity), \
+	              cuda.In(particle_B_angular_velocity),\
+	              cuda.In(particle_A_numvertices),\
+	              cuda.In(particle_B_numvertices),\
+	              cuda.In(particle_A_id),\
+	              cuda.In(particle_B_id),\
+	              cuda.InOut(displacement_tang),\
+	              cuda.InOut(force),\
+	              cuda.InOut(torque),\
+	              cuda.In(quaternion_A),\
+	              cuda.In(quaternion_B),\
+	              cuda.In(num_pairs_P),\
+	              cuda.InOut(pair_IDs),\
+	              cuda.InOut(collision),\
+	              cuda.In(mom_inertia_size_A),\
+	              cuda.In(mom_inertia_size_B),\
+	              #cuda.InOut(pendepth),\
+	              #cuda.InOut(tochecki),\
+	              block=block,grid=grid)
+	              
 	#if collision[0]==1:
 	#	print("Collision info: ",collision)
-	#	print(particle_contacttime)
+	#	print(displacement_tang)
 	#printi=0
 	#for i in range(0,len(collision)):
 		#if collision[i]>0:
 			#printi=1
 			##print(collision)
 	#if printi==1:		
-		#print(particle_contacttime)
-	return force,torque,tempi,collision, particle_contacttime
+		#print(displacement_tang)
+	#print("Collision info: ", len(collision),sum(collision))
+	
+	return (force, torque, collision, displacement_tang)
 
 
-def Contact_detection_GPU(particle_A_center_of_mass,particle_B_center_of_mass,particle_A_vertices,particle_B_vertices,particle_A_velocity,particle_B_velocity,particle_A_angular_velocity, particle_B_angular_velocity,particle_A_numvertices,particle_B_numvertices,particle_A_id,particle_B_id,particle_contacttime,Ks,Kd,Kt,mu,force,torque,num_vertices_max):
+def Contact_detection_GPU(		particle_A_center_of_mass,   particle_B_center_of_mass,\
+								particle_A_vertices,	 	 particle_B_vertices,\
+								particle_A_velocity,		 particle_B_velocity,\
+								particle_A_angular_velocity, particle_B_angular_velocity,\
+								particle_A_numvertices,      particle_B_numvertices,\
+								particle_A_id, 			     particle_B_id,\
+								displacement_tang,\
+								Kn, en, et, mu, \
+								Kn_wall, en_wall, et_wall, mu_wall, num_particles_wall,\
+								force,                       torque,\
+								num_vertices_maxi,\
+								quaternion_A,    			 quaternion_B,\
+								timestep_size,\
+								mom_inertia_size_A,   		 mom_inertia_size_B):
 
 	start = time.time()
-	calc_func = gpu_contact_detection_init(Ks=Ks,Kd=Kd,Kt=Kt,mu=mu,num_pairs=particle_A_center_of_mass.shape[0],num_vertices_max=num_vertices_max)
-	force,torque,tempi,collision,particle_contacttime = gpu_contact_detection(calc_func, particle_A_center_of_mass,particle_B_center_of_mass,particle_A_vertices,particle_B_vertices,particle_A_velocity,particle_B_velocity,particle_A_angular_velocity, particle_B_angular_velocity,particle_A_numvertices,particle_B_numvertices,particle_A_id,particle_B_id,particle_contacttime,force,torque)
+	calc_func = gpu_contact_detection_init(Kn=Kn,\
+										   en=en,\
+										   et=et,\
+										   Kn_wall=Kn_wall,\
+										   en_wall=en_wall,\
+										   et_wall=et_wall,\
+										   mu=mu,\
+										   mu_wall=mu_wall,\
+										   num_pairs=particle_A_center_of_mass.shape[0],\
+										   num_vertices_max=num_vertices_maxi,\
+										   num_particles_wall=num_particles_wall,\
+										   timestep=timestep_size)
+										   
+	force, torque, collision, displacement_tang =\
+					          \
+					          gpu_contact_detection(\
+					          \
+					          calc_func,              particle_A_center_of_mass,    particle_B_center_of_mass,\
+					          particle_A_vertices,    particle_B_vertices,          particle_A_velocity,\
+					          particle_B_velocity,    particle_A_angular_velocity,  particle_B_angular_velocity,\
+					          particle_A_numvertices, particle_B_numvertices,       particle_A_id,\
+					          particle_B_id,          displacement_tang,            force,\
+					          torque, 				  quaternion_A,					quaternion_B,\
+					          mom_inertia_size_A,	  mom_inertia_size_B)
 	end = time.time()
 	#print("Time for run ",end - start)
 	
-
-	return (force,torque,particle_contacttime)
+	return (force, torque, displacement_tang, collision)
 
 
 
